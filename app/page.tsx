@@ -1,7 +1,8 @@
 'use client'
 
 import { useRef, useState, type ReactNode } from 'react'
-import { Upload, Link2, Clock3, ShieldCheck, Copy, Check, Play, Download, Film, ArrowUpRight, Sparkles } from 'lucide-react'
+import { upload } from '@vercel/blob/client'
+import { Upload, Link2, Clock3, ShieldCheck, Copy, Check, Play, Download, ArrowUpRight, Sparkles } from 'lucide-react'
 
 const expiryOptions = [
   { value: 'permanent', label: 'Permanent', detail: 'Never expires' },
@@ -37,31 +38,23 @@ export default function Page() {
     setUploadStatus('Preparing your video…')
     setError('')
     try {
-      const body = new FormData()
-      body.append('file', file)
-      body.append('expiry', expiry)
-      const data = await new Promise<{ id: string; pathname: string; expiresAt: number | null }>((resolve, reject) => {
-        const request = new XMLHttpRequest()
-        request.open('POST', '/api/upload')
-        request.upload.onprogress = (event) => {
-          if (!event.lengthComputable) return
-          const percent = Math.round((event.loaded / event.total) * 100)
+      const id = crypto.randomUUID()
+      const expiresAt = expiry === 'permanent' ? null : Date.now() + ({ '3d': 3, '1w': 7, '1m': 30 }[expiry] ?? 3) * 86400000
+      const blob = await upload(`dropframe/${id}/${file.name}`, file, {
+        access: 'private',
+        handleUploadUrl: '/api/upload',
+        multipart: true,
+        contentType: file.type,
+        clientPayload: JSON.stringify({ expiry, id }),
+        onUploadProgress: (progress) => {
+          const percent = Math.round(progress.percentage)
           setUploadProgress(percent)
           setUploadStatus(percent >= 100 ? 'Finishing and securing your link…' : `Uploading video… ${percent}%`)
-        }
-        request.onload = () => {
-          try {
-            const result = JSON.parse(request.responseText)
-            if (request.status < 200 || request.status >= 300) reject(new Error(result.error || 'Upload failed'))
-            else resolve(result)
-          } catch { reject(new Error('Upload failed. Please try again.')) }
-        }
-        request.onerror = () => reject(new Error('Upload interrupted. Check your connection and try again.'))
-        request.send(body)
+        },
       })
       setUploadProgress(100)
       setUploadStatus('Upload complete — your link is ready.')
-      setShareUrl(`${window.location.origin}/watch/${data.id}?pathname=${encodeURIComponent(data.pathname)}${data.expiresAt ? `&expiresAt=${data.expiresAt}` : ''}`)
+      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(blob.pathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setUploadStatus('Upload stopped')
