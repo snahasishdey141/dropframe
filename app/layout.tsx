@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Dropframe — Share videos simply',
+  description: 'Upload a video, set an expiry, and share one clean watch link. No account required.',
   generator: 'v0.app',
   icons: {
     icon: [
