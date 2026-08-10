@@ -16,6 +16,8 @@ export default function Page() {
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStatus, setUploadStatus] = useState('')
   const [shareUrl, setShareUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
@@ -30,17 +32,39 @@ export default function Page() {
 
   async function upload() {
     if (!file) return
-    setUploading(true); setError('')
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadStatus('Preparing your video…')
+    setError('')
     try {
       const body = new FormData()
       body.append('file', file)
       body.append('expiry', expiry)
-      const response = await fetch('/api/upload', { method: 'POST', body })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Upload failed')
+      const data = await new Promise<{ id: string; pathname: string; expiresAt: number | null }>((resolve, reject) => {
+        const request = new XMLHttpRequest()
+        request.open('POST', '/api/upload')
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return
+          const percent = Math.round((event.loaded / event.total) * 100)
+          setUploadProgress(percent)
+          setUploadStatus(percent >= 100 ? 'Finishing and securing your link…' : `Uploading video… ${percent}%`)
+        }
+        request.onload = () => {
+          try {
+            const result = JSON.parse(request.responseText)
+            if (request.status < 200 || request.status >= 300) reject(new Error(result.error || 'Upload failed'))
+            else resolve(result)
+          } catch { reject(new Error('Upload failed. Please try again.')) }
+        }
+        request.onerror = () => reject(new Error('Upload interrupted. Check your connection and try again.'))
+        request.send(body)
+      })
+      setUploadProgress(100)
+      setUploadStatus('Upload complete — your link is ready.')
       setShareUrl(`${window.location.origin}/watch/${data.id}?pathname=${encodeURIComponent(data.pathname)}${data.expiresAt ? `&expiresAt=${data.expiresAt}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      setUploadStatus('Upload stopped')
     } finally { setUploading(false) }
   }
 
@@ -58,14 +82,15 @@ export default function Page() {
 
       <section className="mx-auto max-w-6xl px-5 pb-14 pt-10 md:px-8 md:pt-20">
         <div className="grid gap-12 lg:grid-cols-[1fr_0.88fr] lg:items-center">
-          <div><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5 text-accent" /> Share without the baggage</div><h1 className="max-w-xl text-balance text-5xl font-semibold tracking-[-0.055em] text-foreground sm:text-6xl lg:text-7xl">Send videos.<br /><span className="text-muted-foreground">Keep it simple.</span></h1><p className="mt-6 max-w-md text-pretty text-base leading-7 text-muted-foreground">Upload a video, choose when it disappears, and share one clean link. No account, no compression, no clutter.</p></div>
+          <div><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5 text-accent" /> Share without the baggage</div><h1 className="max-w-xl text-balance text-5xl font-semibold tracking-[-0.055em] text-foreground sm:text-6xl lg:text-7xl">Send videos.<br /><span className="text-muted-foreground">Keep it simple.</span></h1><p className="mt-6 max-w-md text-pretty text-base leading-7 text-muted-foreground">Upload a video, choose when it disappears, and share one clean link. No account, no compression, no file-size limit from Dropframe.</p></div>
           <div className="rounded-[1.75rem] border border-border bg-card p-2 shadow-[0_24px_80px_-30px_rgba(15,23,42,0.25)]">
             <div onClick={() => inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); acceptFile(e.dataTransfer.files[0]) }} className={`flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center transition ${dragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/40 hover:border-primary/50 hover:bg-muted/70'}`}>
               <input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={(e) => acceptFile(e.target.files?.[0])} />
               <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-foreground text-background"><Upload className="size-5" /></div>
-              <p className="font-medium">{file ? file.name : 'Drop a video here'}</p><p className="mt-2 text-sm text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · Ready to upload` : 'or click to browse your files'}</p>
+              <p className="max-w-full truncate font-medium">{file ? file.name : 'Drop a video here'}</p><p className="mt-2 text-sm text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · Ready to upload` : 'or click to browse your files'}</p>
+              {uploading && <div className="mt-5 w-full max-w-sm" aria-live="polite"><div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground"><span>{uploadStatus}</span><span>{uploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${uploadProgress}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">Large videos can take a little while. Keep this tab open.</p></div>}
             </div>
-            <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end"><label className="grid gap-2 text-xs font-medium text-muted-foreground">LINK EXPIRY<select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring">{expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></label><button disabled={!file || uploading} onClick={upload} className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">{uploading ? 'Uploading…' : 'Create share link'} <ArrowUpRight className="ml-1 inline size-4" /></button></div>
+            <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end"><label className="grid gap-2 text-xs font-medium text-muted-foreground">LINK EXPIRY<select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring">{expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></label><button disabled={!file || uploading} onClick={upload} className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">{uploading ? (uploadProgress ? `Uploading ${uploadProgress}%` : 'Preparing upload…') : 'Create share link'} <ArrowUpRight className="ml-1 inline size-4" /></button></div>
             {error && <p className="px-4 pb-4 text-sm text-destructive">{error}</p>}
           </div>
         </div>
