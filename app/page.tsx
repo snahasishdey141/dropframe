@@ -39,8 +39,9 @@ export default function Page() {
     setError('')
     try {
       const id = crypto.randomUUID()
+      const pathname = `dropframe/${id}/${file.name}`
       const expiresAt = expiry === 'permanent' ? null : Date.now() + ({ '3d': 3, '1w': 7, '1m': 30 }[expiry] ?? 3) * 86400000
-      const blob = await upload(`dropframe/${id}/${file.name}`, file, {
+      const blob = await upload(pathname, file, {
         access: 'private',
         handleUploadUrl: '/api/upload',
         multipart: true,
@@ -54,7 +55,9 @@ export default function Page() {
       })
       setUploadProgress(100)
       setUploadStatus('Upload complete — your link is ready.')
-      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(blob.pathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
+      const uploadedPathname = blob?.pathname || pathname
+      if (!uploadedPathname) throw new Error('Upload completed but no video path was returned.')
+      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(uploadedPathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setUploadStatus('Upload stopped')
