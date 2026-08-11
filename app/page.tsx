@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Upload, Link2, Clock3, ShieldCheck, Copy, Check, Play, Download, ArrowUpRight, Sparkles } from 'lucide-react'
 
 const expiryOptions = [
@@ -21,6 +21,21 @@ export default function Page() {
   const [shareUrl, setShareUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
+  const [uploads, setUploads] = useState<{ id: string; name: string; size: number; createdAt: number; expiresAt: number | null }[]>([])
+
+  useEffect(() => {
+    try {
+      setUploads(JSON.parse(localStorage.getItem('dropframe-uploads') || '[]'))
+    } catch { setUploads([]) }
+  }, [])
+
+  function saveUpload(record: { id: string; name: string; size: number; createdAt: number; expiresAt: number | null }) {
+    setUploads((current) => {
+      const next = [record, ...current.filter((item) => item.id !== record.id)].slice(0, 20)
+      localStorage.setItem('dropframe-uploads', JSON.stringify(next))
+      return next
+    })
+  }
 
   function acceptFile(next: File | undefined) {
     if (!next) return
@@ -70,7 +85,9 @@ export default function Page() {
       }
       setUploadProgress(100)
       setUploadStatus('Upload complete — your link is ready.')
-      setShareUrl(`${window.location.origin}/watch/${id}`)
+      const link = `${window.location.origin}/watch/${id}`
+      setShareUrl(link)
+      saveUpload({ id, name: file.name, size: file.size, createdAt: Date.now(), expiresAt })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setUploadStatus('Upload stopped')
@@ -85,8 +102,8 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 md:px-8">
-        <div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground"><Play className="size-4 fill-current" /></div><span className="font-mono text-sm font-bold tracking-tight">DROPFRAME</span></div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="hidden items-center gap-2 sm:flex"><ShieldCheck className="size-4 text-accent" /> Private by default</span><button className="rounded-full border border-border px-4 py-2 font-medium text-foreground transition hover:bg-muted">My uploads</button></div>
+        <div className="flex items-center gap-3"><img src="/dropframe-mark.svg" alt="Dropframe" className="size-9 rounded-xl" /><span className="font-mono text-sm font-bold tracking-tight">DROPFRAME</span></div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="hidden items-center gap-2 sm:flex"><ShieldCheck className="size-4 text-accent" /> Private by default</span><button onClick={() => document.getElementById('uploads')?.scrollIntoView({ behavior: 'smooth' })} className="rounded-full border border-border px-4 py-2 font-medium text-foreground transition hover:bg-muted">My uploads</button></div>
       </header>
 
       <section className="mx-auto max-w-6xl px-5 pb-14 pt-10 md:px-8 md:pt-20">
@@ -105,7 +122,9 @@ export default function Page() {
         </div>
       </section>
 
-      {shareUrl && <section className="mx-auto max-w-6xl px-5 pb-14 md:px-8"><div className="flex flex-col gap-4 rounded-2xl border border-accent/30 bg-accent/5 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold">Your video is ready to share</p><p className="mt-1 max-w-xl truncate font-mono text-xs text-muted-foreground">{shareUrl}</p></div><button onClick={copyLink} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? 'Copied' : 'Copy link'}</button></div></section>}
+      {shareUrl && <section className="mx-auto max-w-6xl px-5 pb-10 md:px-8"><div className="flex flex-col gap-4 rounded-2xl border border-accent/30 bg-accent/5 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold">Your video is ready to share</p><p className="mt-1 max-w-xl truncate font-mono text-xs text-muted-foreground">{shareUrl}</p></div><button onClick={copyLink} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? 'Copied' : 'Copy link'}</button></div></section>}
+
+      {uploads.length > 0 && <section id="uploads" className="mx-auto max-w-6xl px-5 pb-14 md:px-8"><div className="mb-4 flex items-end justify-between"><div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Your history</p><h2 className="mt-2 text-2xl font-semibold tracking-tight">My uploads</h2></div><span className="text-sm text-muted-foreground">Saved on this device</span></div><div className="overflow-hidden rounded-2xl border border-border bg-card">{uploads.map((item) => <div key={item.id} className="flex flex-col gap-4 border-b border-border p-4 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{(item.size / 1024 / 1024).toFixed(1)} MB · {item.expiresAt ? `Expires ${new Date(item.expiresAt).toLocaleDateString()}` : 'Permanent'}</p></div><div className="flex shrink-0 gap-2"><a href={`/watch/${item.id}`} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"><Play className="size-3.5 fill-current" /> Watch</a><button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/watch/${item.id}`); setCopied(true); setTimeout(() => setCopied(false), 1800) }} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><Copy className="size-3.5" /> Copy link</button></div></div>)}</div></section>}
 
       <section className="border-t border-border"><div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-3 md:px-8"><Feature icon={<Clock3 />} title="Set it and forget it" text="Pick an expiry window and the link takes care of the rest." /><Feature icon={<Link2 />} title="One clean link" text="Anyone with the link can watch instantly in their browser." /><Feature icon={<Download />} title="Download when needed" text="Keep downloads available for the people you trust." /></div></section>
       <footer className="mx-auto flex max-w-6xl justify-between px-5 py-7 text-xs text-muted-foreground md:px-8"><span>DROPFRAME / 2026</span><span>Made for sharing, not storing.</span></footer>
