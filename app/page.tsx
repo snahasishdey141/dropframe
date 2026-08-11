@@ -49,8 +49,13 @@ export default function Page() {
           const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size))
           setUploadStatus(`Preparing part ${partNumber}…`)
           const { url } = await api({ action: 'sign', key: pathname, uploadId, partNumber })
-          const response = await fetch(url, { method: 'PUT', body: chunk })
-          if (!response.ok) throw new Error(`Part ${partNumber} failed to upload.`)
+          let response: Response
+          try {
+            response = await fetch(url, { method: 'PUT', body: chunk })
+          } catch {
+            throw new Error(`Part ${partNumber} could not reach R2. Check the bucket CORS policy and try again.`)
+          }
+          if (!response.ok) throw new Error(`Part ${partNumber} failed to upload (HTTP ${response.status}).`)
           const etag = response.headers.get('etag')
           if (!etag) throw new Error(`Part ${partNumber} returned no verification tag.`)
           parts.push({ ETag: etag, PartNumber: partNumber })
