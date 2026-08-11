@@ -11,6 +11,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     assertR2Config()
     const head = await r2.send(new HeadObjectCommand({ Bucket: r2Bucket, Key: key }))
+    const storedExpiry = head.Metadata?.expiresat ? Number(head.Metadata.expiresat) : null
+    if (storedExpiry && storedExpiry <= Date.now()) return new NextResponse('This video has expired.', { status: 410 })
     const object = await r2.send(new GetObjectCommand({ Bucket: r2Bucket, Key: key }))
     if (!object.Body) return new NextResponse('Video not found.', { status: 404 })
     return new NextResponse(object.Body.transformToWebStream(), { headers: { 'Content-Type': head.ContentType || 'video/mp4', 'Content-Length': String(head.ContentLength || ''), 'Content-Disposition': request.nextUrl.searchParams.get('download') === '1' ? `attachment; filename="${key.split('/').pop()}"` : 'inline', 'Cache-Control': 'private, max-age=3600' } })

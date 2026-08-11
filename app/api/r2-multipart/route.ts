@@ -12,7 +12,9 @@ export async function POST(request: NextRequest) {
     if (!key.startsWith('dropframe/') || !key.includes('/')) return NextResponse.json({ error: 'Invalid object key.' }, { status: 400 })
 
     if (action === 'create') {
-      const result = await r2.send(new CreateMultipartUploadCommand({ Bucket: r2Bucket, Key: key, ContentType: body.contentType || 'video/mp4' }))
+      const expiresAt = body.expiresAt === null ? null : Number(body.expiresAt)
+      if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) return NextResponse.json({ error: 'Invalid expiry time.' }, { status: 400 })
+      const result = await r2.send(new CreateMultipartUploadCommand({ Bucket: r2Bucket, Key: key, ContentType: body.contentType || 'video/mp4', Metadata: expiresAt === null ? { permanent: 'true' } : { expiresat: String(expiresAt) } }))
       return NextResponse.json({ uploadId: result.UploadId })
     }
 

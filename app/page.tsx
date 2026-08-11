@@ -41,7 +41,7 @@ export default function Page() {
       const pathname = `dropframe/${id}/${file.name}`
       const expiresAt = expiry === 'permanent' ? null : Date.now() + ({ '3d': 3, '1w': 7, '1m': 30 }[expiry] ?? 3) * 86400000
       const api = async (body: object) => { const response = await fetch('/api/r2-multipart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'R2 request failed'); return data }
-      const { uploadId } = await api({ action: 'create', key: pathname, contentType: file.type })
+      const { uploadId } = await api({ action: 'create', key: pathname, contentType: file.type, expiresAt })
       const chunkSize = 50 * 1024 * 1024
       const parts: { ETag: string; PartNumber: number }[] = []
       try {
