@@ -12,10 +12,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     assertR2Config()
     let key = requestedKey
     if (!key) {
-      const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: `dropframe/${id}/`, MaxKeys: 2 }))
+      // Removed the 'dropframe/' prefix so it looks directly in the ID folder
+      const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: `${id}/`, MaxKeys: 2 }))
       key = listed.Contents?.[0]?.Key ?? null
     }
-    if (!key || !key.startsWith(`dropframe/${id}/`)) return new NextResponse('Video not found.', { status: 404 })
+    // Also removed the 'dropframe/' check here
+    if (!key || !key.startsWith(`${id}/`)) return new NextResponse('Video not found.', { status: 404 })
 
     const head = await r2.send(new HeadObjectCommand({ Bucket: r2Bucket, Key: key }))
     const storedExpiry = head.Metadata?.expiresat ? Number(head.Metadata.expiresat) : null
