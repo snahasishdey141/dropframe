@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     let continuationToken: string | undefined
     let deleted = 0
     do {
-      const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: 'dropframe/', ContinuationToken: continuationToken }))
+      // Remove the prefix entirely so it scans the whole bucket, or change it to the correct root folder if you have one
+const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, ContinuationToken: continuationToken }))
       for (const item of listed.Contents ?? []) {
         if (!item.Key) continue
         try {
