@@ -1,4 +1,4 @@
-import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, UploadPartCommand } from '@aws-sdk/client-s3'
+import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, PutBucketCorsCommand, UploadPartCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { NextRequest, NextResponse } from 'next/server'
 import { assertR2Config, r2, r2Bucket } from '@/lib/r2'
@@ -12,6 +12,19 @@ export async function POST(request: NextRequest) {
     if (!key.startsWith('dropframe/') || !key.includes('/')) return NextResponse.json({ error: 'Invalid object key.' }, { status: 400 })
 
     if (action === 'create') {
+      const origin = request.headers.get('origin') || process.env.R2_PUBLIC_URL || '*'
+      await r2.send(new PutBucketCorsCommand({
+        Bucket: r2Bucket,
+        CORSConfiguration: {
+          CORSRules: [{
+            AllowedOrigins: [origin],
+            AllowedMethods: ['PUT', 'GET', 'HEAD'],
+            AllowedHeaders: ['*'],
+            ExposeHeaders: ['ETag', 'Content-Length'],
+            MaxAgeSeconds: 3600,
+          }],
+        },
+      }))
       const expiresAt = body.expiresAt === null ? null : Number(body.expiresAt)
       if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) return NextResponse.json({ error: 'Invalid expiry time.' }, { status: 400 })
       const result = await r2.send(new CreateMultipartUploadCommand({ Bucket: r2Bucket, Key: key, ContentType: body.contentType || 'video/mp4', Metadata: expiresAt === null ? { permanent: 'true' } : { expiresat: String(expiresAt) } }))
