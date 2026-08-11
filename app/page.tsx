@@ -1,7 +1,6 @@
 'use client'
 
 import { useRef, useState, type ReactNode } from 'react'
-import { upload } from '@vercel/blob/client'
 import { Upload, Link2, Clock3, ShieldCheck, Copy, Check, Play, Download, ArrowUpRight, Sparkles } from 'lucide-react'
 
 const expiryOptions = [
@@ -41,23 +40,32 @@ export default function Page() {
       const id = crypto.randomUUID()
       const pathname = `dropframe/${id}/${file.name}`
       const expiresAt = expiry === 'permanent' ? null : Date.now() + ({ '3d': 3, '1w': 7, '1m': 30 }[expiry] ?? 3) * 86400000
-      const blob = await upload(pathname, file, {
-        access: 'private',
-        handleUploadUrl: '/api/upload',
-        multipart: true,
-        contentType: file.type,
-        clientPayload: JSON.stringify({ expiry, id }),
-        onUploadProgress: (progress) => {
-          const percent = Math.round(progress.percentage)
+      const api = async (body: object) => { const response = await fetch('/api/r2-multipart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'R2 request failed'); return data }
+      const { uploadId } = await api({ action: 'create', key: pathname, contentType: file.type })
+      const chunkSize = 50 * 1024 * 1024
+      const parts: { ETag: string; PartNumber: number }[] = []
+      try {
+        for (let offset = 0, partNumber = 1; offset < file.size; offset += chunkSize, partNumber++) {
+          const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size))
+          setUploadStatus(`Preparing part ${partNumber}…`)
+          const { url } = await api({ action: 'sign', key: pathname, uploadId, partNumber })
+          const response = await fetch(url, { method: 'PUT', body: chunk })
+          if (!response.ok) throw new Error(`Part ${partNumber} failed to upload.`)
+          const etag = response.headers.get('etag')
+          if (!etag) throw new Error(`Part ${partNumber} returned no verification tag.`)
+          parts.push({ ETag: etag, PartNumber: partNumber })
+          const percent = Math.round((Math.min(offset + chunk.size, file.size) / file.size) * 100)
           setUploadProgress(percent)
-          setUploadStatus(percent >= 100 ? 'Finishing and securing your link…' : `Uploading video… ${percent}%`)
-        },
-      })
+          setUploadStatus(`Uploading video… ${percent}%`)
+        }
+        await api({ action: 'complete', key: pathname, uploadId, parts })
+      } catch (uploadError) {
+        await api({ action: 'abort', key: pathname, uploadId }).catch(() => undefined)
+        throw uploadError
+      }
       setUploadProgress(100)
       setUploadStatus('Upload complete — your link is ready.')
-      const uploadedPathname = blob?.pathname || pathname
-      if (!uploadedPathname) throw new Error('Upload completed but no video path was returned.')
-      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(uploadedPathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
+      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(pathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setUploadStatus('Upload stopped')

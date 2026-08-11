@@ -1,16 +1,21 @@
-import { get } from '@vercel/blob'
+import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { NextRequest, NextResponse } from 'next/server'
+import { assertR2Config, r2, r2Bucket } from '@/lib/r2'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const pathname = request.nextUrl.searchParams.get('pathname')
+  const key = request.nextUrl.searchParams.get('pathname')
   const expiresAt = request.nextUrl.searchParams.get('expiresAt')
   if (expiresAt && Number(expiresAt) < Date.now()) return new NextResponse('This link has expired.', { status: 410 })
-  if (!pathname || !pathname.startsWith(`dropframe/${id}/`)) return NextResponse.json({ error: 'Invalid video.' }, { status: 400 })
+  if (!key || !key.startsWith(`dropframe/${id}/`)) return NextResponse.json({ error: 'Invalid video.' }, { status: 400 })
   try {
-    const result = await get(pathname, { access: 'private', ifNoneMatch: request.headers.get('if-none-match') ?? undefined })
-    if (!result) return new NextResponse('Video not found or expired.', { status: 404 })
-    if (result.statusCode === 304) return new NextResponse(null, { status: 304, headers: { ETag: result.blob.etag, 'Cache-Control': 'private, no-cache' } })
-    return new NextResponse(result.stream, { headers: { 'Content-Type': result.blob.contentType || 'video/mp4', ETag: result.blob.etag, 'Content-Disposition': request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline', 'Cache-Control': 'private, no-cache' } })
-  } catch { return new NextResponse('Video not found or expired.', { status: 404 }) }
+    assertR2Config()
+    const head = await r2.send(new HeadObjectCommand({ Bucket: r2Bucket, Key: key }))
+    const object = await r2.send(new GetObjectCommand({ Bucket: r2Bucket, Key: key }))
+    if (!object.Body) return new NextResponse('Video not found.', { status: 404 })
+    return new NextResponse(object.Body.transformToWebStream(), { headers: { 'Content-Type': head.ContentType || 'video/mp4', 'Content-Length': String(head.ContentLength || ''), 'Content-Disposition': request.nextUrl.searchParams.get('download') === '1' ? `attachment; filename="${key.split('/').pop()}"` : 'inline', 'Cache-Control': 'private, max-age=3600' } })
+  } catch (error) {
+    console.error('[v0] R2 video delivery error:', error)
+    return new NextResponse('Video not found or expired.', { status: 404 })
+  }
 }
