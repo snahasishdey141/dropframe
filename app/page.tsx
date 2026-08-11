@@ -47,7 +47,7 @@ export default function Page() {
       try {
         for (let offset = 0, partNumber = 1; offset < file.size; offset += chunkSize, partNumber++) {
           const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size))
-          setUploadStatus(`Preparing part ${partNumber}…`)
+          setUploadStatus('Uploading your video…')
           const { url } = await api({ action: 'sign', key: pathname, uploadId, partNumber })
           let response: Response
           try {
@@ -61,7 +61,7 @@ export default function Page() {
           parts.push({ ETag: etag, PartNumber: partNumber })
           const percent = Math.round((Math.min(offset + chunk.size, file.size) / file.size) * 100)
           setUploadProgress(percent)
-          setUploadStatus(`Uploading video… ${percent}%`)
+          setUploadStatus(percent >= 100 ? 'Finishing your video…' : 'Uploading your video…')
         }
         await api({ action: 'complete', key: pathname, uploadId, parts })
       } catch (uploadError) {
@@ -97,9 +97,9 @@ export default function Page() {
               <input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={(e) => acceptFile(e.target.files?.[0])} />
               <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-foreground text-background"><Upload className="size-5" /></div>
               <p className="max-w-full truncate font-medium">{file ? file.name : 'Drop a video here'}</p><p className="mt-2 text-sm text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · Ready to upload` : 'or click to browse your files'}</p>
-              {uploading && <div className="mt-5 w-full max-w-sm" aria-live="polite"><div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground"><span>{uploadStatus}</span><span>{uploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${uploadProgress}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">Large videos can take a little while. Keep this tab open.</p></div>}
+              {uploading && <div className="mt-5 w-full max-w-sm" aria-live="polite"><div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground"><span>{uploadStatus}</span><span>{uploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out" style={{ width: `${uploadProgress}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">Large videos upload securely in the background. Keep this tab open.</p></div>}
             </div>
-            <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end"><label className="grid gap-2 text-xs font-medium text-muted-foreground">LINK EXPIRY<select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring">{expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></label><button disabled={!file || uploading} onClick={upload} className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">{uploading ? (uploadProgress ? `Uploading ${uploadProgress}%` : 'Preparing upload…') : 'Create share link'} <ArrowUpRight className="ml-1 inline size-4" /></button></div>
+            <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end"><label className="grid gap-2 text-xs font-medium text-muted-foreground">LINK EXPIRY<select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="h-11 rounded-xl border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-ring">{expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label} · {option.detail}</option>)}</select></label><button disabled={!file || uploading} onClick={upload} className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">{uploading ? (uploadProgress ? `${uploadProgress}% uploaded` : 'Preparing upload…') : 'Create share link'} <ArrowUpRight className="ml-1 inline size-4" /></button></div>
             {error && <p className="px-4 pb-4 text-sm text-destructive">{error}</p>}
           </div>
         </div>
