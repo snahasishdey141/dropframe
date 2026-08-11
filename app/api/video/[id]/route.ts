@@ -12,12 +12,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     assertR2Config()
     let key = requestedKey
     if (!key) {
-      // Removed the 'dropframe/' prefix so it looks directly in the ID folder
-      const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: `${id}/`, MaxKeys: 2 }))
+      const listed = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: `dropframe/${id}/`, MaxKeys: 2 }))
       key = listed.Contents?.[0]?.Key ?? null
+      if (!key) {
+        const listedFallback = await r2.send(new ListObjectsV2Command({ Bucket: r2Bucket, Prefix: `${id}/`, MaxKeys: 2 }))
+        key = listedFallback.Contents?.[0]?.Key ?? null
+      }
     }
-    // Also removed the 'dropframe/' check here
-    if (!key || !key.startsWith(`${id}/`)) return new NextResponse('Video not found.', { status: 404 })
+    if (!key || (!key.startsWith(`dropframe/${id}/`) && !key.startsWith(`${id}/`))) return new NextResponse('Video not found.', { status: 404 })
 
     const head = await r2.send(new HeadObjectCommand({ Bucket: r2Bucket, Key: key }))
     const storedExpiry = head.Metadata?.expiresat ? Number(head.Metadata.expiresat) : null
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const headers = new Headers({
       'Content-Type': head.ContentType || 'video/mp4',
       'Accept-Ranges': 'bytes',
-      'Content-Disposition': `${request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline'}; filename="${filename.replace(/"/g, '')}"`,
+      'Content-Disposition': `${request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline'}; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       'Cache-Control': 'private, max-age=3600',
     })
     if (rangeMatch) {
