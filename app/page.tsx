@@ -70,7 +70,7 @@ export default function Page() {
       }
       setUploadProgress(100)
       setUploadStatus('Upload complete — your link is ready.')
-      setShareUrl(`${window.location.origin}/watch/${id}?pathname=${encodeURIComponent(pathname)}${expiresAt ? `&expiresAt=${expiresAt}` : ''}`)
+      setShareUrl(`${window.location.origin}/watch/${id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
       setUploadStatus('Upload stopped')
